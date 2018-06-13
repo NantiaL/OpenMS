@@ -56,6 +56,7 @@
 #include <OpenMS/FILTERING/ID/IDFilter.h>
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
 #include <OpenMS/FORMAT/ConsensusXMLFile.h>
+#include <OpenMS/VISUAL/TOPPASOutputFileListVertex.h>
 #include <OpenMS/FORMAT/ConsensusXMLFile.h>
 #include <OpenMS/KERNEL/BaseFeature.h>
 #include <OpenMS/ANALYSIS/ID/PeptideIndexing.h>
@@ -124,7 +125,7 @@ protected:
 
     //Output
     registerOutputFile_("out", "<file>", "", "Output consensusXML file");
-    setValidFormats_("out",ListUtils::create<String>(".consensusXML"));
+    setValidFormats_("out",ListUtils::create<String>("consensusXML"));
 
 /*
     registerStringOption_("decoy_string", "<text>", "DECOY_", "String to indicate decoy protein", false);
@@ -589,7 +590,10 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
       addDataProcessing_(cons_map, getProcessingInfo_(DataProcessing::FILTERING));
 
       // TODO: MultiplexResolver
-      //** MultiplexResolver **//
+      //** MultiplexResolver **// (??? s)
+      //MultiplexDeltaMassesGenerator generator = MultiplexDeltaMassesGenerator(labels_, missed_cleavages_, label_mass_shift_);
+      //generator.printSamplesLabelsLis.ProteomicsLFQ branch();
+      //generator.printDeltaMassesList();
 
       // ** FileFilter **//
       // remove unassigned peptide identifications
@@ -620,6 +624,7 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
     }
 
     cons_file.store(out, merged_map);
+  //  LOG_INFO << "Output path:" << cons_file << endl;
 
     a.stop();
     LOG_INFO << "Quantification and Mapping took: " << a.getClockTime() << " seconds\n" "CPU time: " << a.getCPUTime() << " seconds\n";
