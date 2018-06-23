@@ -42,8 +42,6 @@
 #include <OpenMS/METADATA/ExperimentalDesign.h>
 #include <OpenMS/FORMAT/ExperimentalDesignFile.h>
 
-#include <OpenMS/KERNEL/ConversionHelper.h>
-
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
 
 using namespace OpenMS;
@@ -198,6 +196,7 @@ protected:
       {
         FeatureMap tmp;
         f.load(ins[i], tmp);
+
         StringList ms_runs;
         tmp.getPrimaryMSRunPath(ms_runs);
 
@@ -210,10 +209,10 @@ protected:
         }
         else
         {
-          out_map.getFileDescriptions()[i].filename = ms_runs.front();
+          out_map.getColumnHeaders()[i].filename = ms_runs.front();
         }
-        out_map.getFileDescriptions()[i].size = tmp.size();
-        out_map.getFileDescriptions()[i].unique_id = tmp.getUniqueId();
+        out_map.getColumnHeaders()[i].size = tmp.size();
+        out_map.getColumnHeaders()[i].unique_id = tmp.getUniqueId();
 
         // copy over information on the primary MS run
         ms_run_locations.insert(ms_run_locations.end(), ms_runs.begin(), ms_runs.end());
@@ -248,9 +247,10 @@ protected:
       // exception for "labeled" algorithms: copy file descriptions
       if (labeled)
       {
-        out_map.getFileDescriptions()[1] = out_map.getFileDescriptions()[0];
-        out_map.getFileDescriptions()[0].label = "light";
-        out_map.getFileDescriptions()[1].label = "heavy";
+        out_map.getColumnHeaders()[1] = out_map.getColumnHeaders()[0];
+        out_map.getColumnHeaders()[0].label = "light";
+        out_map.getColumnHeaders()[1].label = "heavy";
+        ms_run_locations.push_back(ms_run_locations[0]);
       }
 
       ////////////////////////////////////////////////////
@@ -266,6 +266,7 @@ protected:
         for (Size i = 1; i <= frac2files.size(); ++i)
         {
           vector<FeatureMap> fraction_maps;
+
           // TODO FRACTIONS: here we assume that the order of featureXML is from fraction 1..n
           // we should check if these are shuffled and error / warn          
           for (size_t feature_map_index = 0; feature_map_index != frac2files[i].size(); ++feature_map_index)
@@ -298,9 +299,9 @@ protected:
       {
         for (Size i = 0; i < ins.size(); ++i)
         {
-          out_map.getFileDescriptions()[i].filename = ins[i];
-          out_map.getFileDescriptions()[i].size = maps[i].size();
-          out_map.getFileDescriptions()[i].unique_id = maps[i].getUniqueId();
+          out_map.getColumnHeaders()[i].filename = ins[i];
+          out_map.getColumnHeaders()[i].size = maps[i].size();
+          out_map.getColumnHeaders()[i].unique_id = maps[i].getUniqueId();
         }
       }
       else
@@ -318,8 +319,6 @@ protected:
     addDataProcessing_(out_map,
                        getProcessingInfo_(DataProcessing::FEATURE_GROUPING));
 
-    // set primary MS runs
-    out_map.setPrimaryMSRunPath(ms_run_locations);
 
     // sort list of peptide identifications in each consensus feature by map index
     out_map.sortPeptideIdentificationsByMapIndex();

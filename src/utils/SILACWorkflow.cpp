@@ -67,7 +67,11 @@
 #include <OpenMS/TRANSFORMATIONS/RAW2PEAK/PeakPickerHiRes.h>
 #include <OpenMS/MATH/STATISTICS/PosteriorErrorProbabilityModel.h>
 #include <OpenMS/TRANSFORMATIONS/FEATUREFINDER/FeatureFinderMultiplexAlgorithm.h>
-
+#include <OpenMS/ANALYSIS/QUANTITATION/PeptideAndProteinQuant.h>
+#include <OpenMS/METADATA/ExperimentalDesign.h>
+#include <OpenMS/FORMAT/ExperimentalDesignFile.h>
+#include <OpenMS/FORMAT/MzTabFile.h>
+#include <OpenMS/FORMAT/MzTab.h>
 
 using namespace OpenMS;
 using namespace std;
@@ -123,6 +127,10 @@ protected:
     registerInputFile_("database", "<file>", "", "input database");
     setValidFormats_("database", ListUtils::create<String>("fasta"));
 
+    // Optional experimental design file
+    registerInputFile_("design", "<file>", "", "design file", false);
+    setValidFormats_("design", ListUtils::create<String>("tsv"));
+
     //Output
     registerOutputFile_("out", "<file>", "", "Output consensusXML file");
     setValidFormats_("out",ListUtils::create<String>("consensusXML"));
@@ -146,6 +154,7 @@ protected:
     Param index_defaults = PeptideIndexing().getParameters();
     Param fdr_defaults = FalseDiscoveryRate().getParameters();
     Param idMapper_defaults = IDMapper().getParameters();
+    Param pq_defaults = PeptideAndProteinQuant().getDefaults();
     Param combined;
     combined.insert("Centroiding:", pp_defaults);
     combined.insert("Quantification:", ffm_defaults);
@@ -153,8 +162,8 @@ protected:
     combined.insert("PeptideIndexing:", index_defaults);
     combined.insert("FalseDiscoveryRate:", fdr_defaults);
     combined.insert("IDMapper:", idMapper_defaults);
+    combined.insert("Protein Quantification:", pq_defaults);
     registerFullParam_(combined);
-
     }
 
 /*
@@ -193,7 +202,7 @@ protected:
     param_pi.setValue("decoy_string_position", getStringOption_("decoy_string_position"));
     param_pi.setValue("enzyme:specificity", "none");
     param_pi.setValue("missing_decoy_action", "warn");
-    param_pi.setValue("enzyme:name", getStringOption_("enzyme:name"));
+    param_pi.setValue("enzyme:name", getStringOption_("enzyme"));
     indexer.setParameters(param_pi);
 */
 
@@ -461,7 +470,7 @@ protected:
   }
 
 
-/// the main_ function is called after all parameters are read
+  /// the main_ function is called after all parameters are read
   ExitCodes main_(int, const char **)
   {
     //-------------------------------------------------------------
@@ -474,6 +483,30 @@ protected:
     StringList in_ids_heavy = getStringList_("in_ids_heavy"); //read idXML heavy file
 
     String out = getStringOption_("out"); //output in .consensusXML format
+
+    // load (optional) experimental design file
+    String design_file = getStringOption_("design");
+    ExperimentalDesign design;
+    if (!design_file.empty())
+    { 
+      design = ExperimentalDesignFile::load(design_file, false);
+    }
+    else
+    {  // default to unfractionated design
+      ExperimentalDesign::MSFileSection msfs;
+      Size count{1};
+      for (String & s : in)
+      {
+        ExperimentalDesign::MSFileSectionEntry e;
+        e.fraction = 1;
+        e.fraction_group = count;
+        e.label = 1;
+        e.path = s;
+        e.sample = count;
+        msfs.push_back(e);
+      }      
+      design.setMSFileSection(msfs);
+    }
 
     //-------------------------------------------------------------
     // reading input (read protein database)
@@ -502,7 +535,7 @@ protected:
     ConsensusMap map;
 
     a.start();
-    for (unsigned i = 0; i < in.size(); i++) //for all file names
+    for (unsigned i = 0; i < in.size(); i++) // for all file names
     {
       const vector<ProteinIdentification> &prot_ids = id_files[i].first; //take the first element from each pair
       const vector<PeptideIdentification> &pept_ids = id_files[i].second; //take the second element from each pair
@@ -536,7 +569,8 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
 ***************************************************************
 */
     a.start();
-    //get parameters for all algorithms
+
+    // get parameters for all algorithms
     Param paramq = getParam_().copy("Quantification:", true); //set the parameters of the algorithm
     writeDebug_("Parameters passed to FeatureFinderMultiplex algorithm", paramq, 3);
     FeatureFinderMultiplexAlgorithm ffm;
@@ -560,6 +594,9 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
     PeakPickerHiRes pp;
     pp.setLogType(log_type_);
     pp.setParameters(pp_param);
+
+    Param pq_param = getParam_().copy("Protein Quantification:", true);
+    writeDebug_("Parameters passed to PeptideAndProteinQuant algorithm", pq_param, 3);
 
     ConsensusXMLFile cons_file;
     ConsensusMap merged_map;
@@ -587,6 +624,7 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
 
       //** IDConflictResolver **//
       IDConflictResolverAlgorithm::resolve(cons_map);
+      IDConflictResolverAlgorithm::resolveBetweenFeatures(cons_map);
       addDataProcessing_(cons_map, getProcessingInfo_(DataProcessing::FILTERING));
 
       // TODO: MultiplexResolver
@@ -598,6 +636,7 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
       // ** FileFilter **//
       // remove unassigned peptide identifications
       cons_map.getUnassignedPeptideIdentifications().clear();
+      
       //remove unannotated features
       auto removeUnannotatedFeatures = [&](ConsensusFeature feature) -> bool
       {
@@ -606,21 +645,14 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
       auto iterator = remove_if(cons_map.begin(), cons_map.end(), removeUnannotatedFeatures);
       cons_map.erase(iterator, cons_map.end());
 
-
       //  (we don need this for storing )
       out = File::removeExtension(in[i]);
       out = out + ".consensusXML"; // add extension .idXML
       LOG_INFO << "Writing to file: " << out << endl;
       cons_file.store(out, cons_map); //store results
 
-
-      //** FileMerger **//
-      for (ConsensusMap::iterator it = map.begin(); it != map.end(); ++it)
-      {
-        it->setMetaValue("file_origin", DataValue(in[i]));
-      }
-
-      merged_map += cons_map;
+      // merge consensus maps
+      merged_map.appendColumns(cons_map);
     }
 
     cons_file.store(out, merged_map);
@@ -630,7 +662,87 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
     LOG_INFO << "Quantification and Mapping took: " << a.getClockTime() << " seconds\n" "CPU time: " << a.getCPUTime() << " seconds\n";
     a.reset();
 
-    //TODO: For FIDO Adapter: merge all
+
+
+    //-------------------------------------------------------------
+    // Protein inference
+    //-------------------------------------------------------------
+    // TODO: Implement inference
+
+    vector<PeptideIdentification> infered_peptides;
+    vector<ProteinIdentification> infered_protein_groups(1, ProteinIdentification());
+
+    // currenty no proper inference implemented - just extract from consensusMap
+    infered_peptides = merged_map.getUnassignedPeptideIdentifications();
+    for (ConsensusMap::Iterator cons_it = merged_map.begin();
+          cons_it != merged_map.end(); ++cons_it)
+    {
+      infered_peptides.insert(infered_peptides.end(),
+                      cons_it->getPeptideIdentifications().begin(),
+                      cons_it->getPeptideIdentifications().end());
+      cons_it->getPeptideIdentifications().clear();
+    }
+    // only keep unique peptides (for now)
+    IDFilter::keepUniquePeptidesPerProtein(infered_peptides);
+
+    // merge (and make unique) protein identifications (for now)
+    set<String> accessions;
+    for (auto & p : merged_map.getProteinIdentifications())
+    {      
+      for (auto & h : p.getHits()) 
+      { 
+        const String & accession = h.getAccession();
+        if (accessions.find(accession) == accessions.end()) { continue; }
+        infered_protein_groups[0].insertHit(h); 
+        ProteinIdentification::ProteinGroup pg;
+        pg.accessions.push_back(accession);
+        infered_protein_groups[0].insertIndistinguishableProteins(pg);
+      }
+    }
+
+    IDFilter::updateProteinReferences(
+      infered_peptides,
+      infered_protein_groups, 
+      true);
+
+    //-------------------------------------------------------------
+    // Peptide quantification
+    //-------------------------------------------------------------
+    PeptideAndProteinQuant quantifier;
+    quantifier.setParameters(pq_param);
+    quantifier.readQuantData(merged_map, design);
+    quantifier.quantifyPeptides(infered_peptides);
+
+    //-------------------------------------------------------------
+    // Protein quantification
+    //-------------------------------------------------------------
+    // TODO: ProteinQuantifier on (merged?) consensusXML (with 1% FDR?) + inference ids (unfiltered?)? 
+    if (infered_protein_groups[0].getIndistinguishableProteins().empty())
+    {
+      throw Exception::MissingInformation(
+       __FILE__, 
+       __LINE__, 
+       OPENMS_PRETTY_FUNCTION, 
+       "No information on indistinguishable protein groups found.");
+    }
+
+    quantifier.quantifyProteins(infered_protein_groups[0]);
+
+    //-------------------------------------------------------------
+    // Export of MzTab file as final output
+    //-------------------------------------------------------------
+
+    // Annotate quants to protein(groups) for easier export in mzTab
+    auto const & protein_quants = quantifier.getProteinResults();
+    PeptideAndProteinQuant::annotateQuantificationsToProteins(protein_quants, infered_protein_groups[0]);
+    vector<ProteinIdentification>& proteins = merged_map.getProteinIdentifications();
+    proteins.insert(proteins.begin(), infered_protein_groups[0]); // insert inference information as first protein identification
+
+    // Fill MzTab with meta data and quants annotated in identification data structure
+    const bool report_unmapped(true);
+    const bool report_unidentified_features(false);
+    MzTab m = MzTab::exportConsensusMapToMzTab(merged_map, String("null"), report_unidentified_features, report_unmapped);
+    MzTabFile().store(out, m);
 
     return  EXECUTION_OK;
   }
