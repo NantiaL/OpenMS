@@ -47,27 +47,26 @@
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/KERNEL/FeatureMap.h>
 #include <OpenMS/FORMAT/FileHandler.h>
+#include <OpenMS/KERNEL/BaseFeature.h>
+#include <OpenMS/KERNEL/ConsensusMap.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/CHEMISTRY/ProteaseDB.h>
-#include <OpenMS/KERNEL/ConsensusMap.h>
-#include <OpenMS/KERNEL/ConsensusFeature.h>
 #include <OpenMS/ANALYSIS/ID/IDMapper.h>
 #include <OpenMS/FORMAT/FeatureXMLFile.h>
 #include <OpenMS/FILTERING/ID/IDFilter.h>
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
+#include <OpenMS/KERNEL/ConsensusFeature.h>
 #include <OpenMS/FORMAT/ConsensusXMLFile.h>
-#include <OpenMS/VISUAL/TOPPASOutputFileListVertex.h>
 #include <OpenMS/FORMAT/ConsensusXMLFile.h>
-#include <OpenMS/KERNEL/BaseFeature.h>
 #include <OpenMS/ANALYSIS/ID/PeptideIndexing.h>
 #include <OpenMS/METADATA/ProteinIdentification.h>
 #include <OpenMS/METADATA/PeptideIdentification.h>
 #include <OpenMS/ANALYSIS/ID/FalseDiscoveryRate.h>
+#include <OpenMS/VISUAL/TOPPASOutputFileListVertex.h>
 #include <OpenMS/ANALYSIS/ID/IDConflictResolverAlgorithm.h>
 #include <OpenMS/TRANSFORMATIONS/RAW2PEAK/PeakPickerHiRes.h>
 #include <OpenMS/MATH/STATISTICS/PosteriorErrorProbabilityModel.h>
 #include <OpenMS/TRANSFORMATIONS/FEATUREFINDER/FeatureFinderMultiplexAlgorithm.h>
-
 
 using namespace OpenMS;
 using namespace std;
@@ -127,18 +126,6 @@ protected:
     registerOutputFile_("out", "<file>", "", "Output consensusXML file");
     setValidFormats_("out",ListUtils::create<String>("consensusXML"));
 
-/*
-    registerStringOption_("decoy_string", "<text>", "DECOY_", "String to indicate decoy protein", false);
-    setValidStrings_("decoy_string", ListUtils::create<String>("DECOY_,dec_"));
-
-    registerStringOption_("decoy_string_position", "<choice>", "prefix", "Should the string be prepended or appended?", false);
-    setValidStrings_("decoy_string_position", ListUtils::create<String>("prefix,suffix"));
-
-    registerStringOption_("enzyme_name", "<choice>", "Trypsin/P", "Enzyme which determines valid cleavage sites", false);
-    StringList enzymes;
-    ProteaseDB::getInstance()->getAllNames(enzymes);
-    setValidStrings_("enzyme_name", enzymes);
-*/
     //get all parameters from different algorithms at once
     Param pp_defaults = PeakPickerHiRes().getDefaults();
     Param ffm_defaults = FeatureFinderMultiplexAlgorithm().getDefaults();
@@ -186,16 +173,6 @@ protected:
      PeptideIndexing::ExitCodes indexer_exit = indexer.run(fasta_db_tmp, protein_ids, peptide_ids);
 
      return indexer_exit;
-
-/* PeptideIndexing indexer;
-    Param param_pi = indexer.getParameters();
-    param_pi.setValue("decoy_string", getStringOption_("decoy_string"));
-    param_pi.setValue("decoy_string_position", getStringOption_("decoy_string_position"));
-    param_pi.setValue("enzyme:specificity", "none");
-    param_pi.setValue("missing_decoy_action", "warn");
-    param_pi.setValue("enzyme:name", getStringOption_("enzyme:name"));
-    indexer.setParameters(param_pi);
-*/
 
   };
 
@@ -511,9 +488,7 @@ protected:
       // add the extension .idXML
       out_filename = out_filename + "_fdr.idXML";
       LOG_INFO << "Writing to file: " << out_filename << endl;
-      // test if a file exists, if yes throw exception.
-      //if (File::exists(out_filename) == true)
-      //{
+
         try
           {
             (File::exists(out_filename) == true);
@@ -523,7 +498,7 @@ protected:
             writeLog_("Error: Unable to create output file.");
             return CANNOT_WRITE_OUTPUT_FILE;
           }
-      //}
+
       idXML_file.store(out_filename, prot_ids, pept_ids);
     }
     a.stop();
@@ -607,12 +582,12 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
       cons_map.erase(iterator, cons_map.end());
 
 
-      //  (we don need this for storing )
-      out = File::removeExtension(in[i]);
+      //  (we don't need this for storing )
+/*      out = File::removeExtension(in[i]);
       out = out + ".consensusXML"; // add extension .idXML
       LOG_INFO << "Writing to file: " << out << endl;
       cons_file.store(out, cons_map); //store results
-
+*/
 
       //** FileMerger **//
       for (ConsensusMap::iterator it = map.begin(); it != map.end(); ++it)
@@ -624,7 +599,7 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
     }
 
     cons_file.store(out, merged_map);
-  //  LOG_INFO << "Output path:" << cons_file << endl;
+    //LOG_INFO << "Output path:" << cons_file << endl;
 
     a.stop();
     LOG_INFO << "Quantification and Mapping took: " << a.getClockTime() << " seconds\n" "CPU time: " << a.getCPUTime() << " seconds\n";
