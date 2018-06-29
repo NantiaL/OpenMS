@@ -581,14 +581,6 @@ Q u a n t i f i c a t i o n  &  M a p p i n g
       auto iterator = remove_if(cons_map.begin(), cons_map.end(), removeUnannotatedFeatures);
       cons_map.erase(iterator, cons_map.end());
 
-
-      //  (we don't need this for storing )
-/*      out = File::removeExtension(in[i]);
-      out = out + ".consensusXML"; // add extension .idXML
-      LOG_INFO << "Writing to file: " << out << endl;
-      cons_file.store(out, cons_map); //store results
-*/
-
       //** FileMerger **//
       for (ConsensusMap::iterator it = map.begin(); it != map.end(); ++it)
       {
